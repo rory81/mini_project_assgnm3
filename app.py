@@ -1,22 +1,33 @@
 import os
 from flask import Flask, render_template, redirect, request, url_for
 from flask_pymongo import PyMongo
+# convert the id -needed to find a particular record-
+# to a format acceptable by MongoDB
 from bson.objectid import ObjectId
 
 
 app = Flask(__name__)
 
 # is to connect to the right database (here:taskmanager)
-app.config["MONGO_DBNAME"] = 'taskmanager'
-# optional voor de pymongo version we are using
-app.config["MONGO_URI"] = 'mongodb+srv://rory81:<>@myfirstcluster-nn45a.mongodb.net/task_manager?retryWrites=true&w=majority'
+app.config["MONGO_DBNAME"] = 'task_manager'
+app.config["MONGO_URI"] = 'mongodb+srv://rory81:<password>@myfirstcluster-nn45a.mongodb.net/task_manager?retryWrites=true&w=majority'
+# QUESTION: in the source code it says
+# app.config["MONGO_URI"] = os.getenv('MONGO_URI', 'mongodb://localhost')
+# this doesn't work for me, not even after adding the export MONGO_URI
+# line to the .bashrc file
+#
+# Did I miss it or isn't there any video on how and
+# most importantly WHY this code is added?
+# Tried this: app.config["MONGO_URI"] = os.getenv("MONGO_URI")
+# after adding the export to the .bashrc file
 
 
 # create an instance of PyMongo and then add the app into that
 mongo = PyMongo(app)
 
 # setup connection to the database
-# routing (@) is a string that, when attach it to a URL, will redirect to a particular function in our Flask application
+# routing (@) is a string that, when attach it to a URL, will redirect to a
+# particular function in our Flask application
 @app.route('/')
 @app.route('/get_tasks')
 def get_tasks():
@@ -32,11 +43,23 @@ def add_task():
 @app.route('/insert_task', methods=['POST'])
 def insert_task():
     tasks = mongo.db.tasks
-    # when you submit information to a URI/weblocation it is submitted in the form of a request object
-    tasks.insert_one(request.form.to_dict())  # the request is converted to a dictionary so it can easily be understood by Mongo
-    return redirect(url_for('get_tasks'))  # redirect to get_tasks so you can see the that the new task is added
+    # when you submit information to a URI/weblocation
+    # it is submitted in the form of a request object
+    # the request is converted to a dictionary
+    # so it can easily be understood by Mongo
+    tasks.insert_one(request.form.to_dict())
+    # redirect to get_tasks so you can see the that the new task is added
+    return redirect(url_for('get_tasks'))
 
-"""
+
+@app.route('/edit_task/<task_id>')
+def edit_task(task_id):
+    the_task = mongo.db.tasks.find_one({"_id": ObjectId(task_id)})
+    all_categories = mongo.db.categories.find()
+    return render_template('edittask.html', task=the_task,
+                           categories=all_categories)
+
+
 @app.route('/update_task/<task_id>', methods=['POST'])
 def update_task(task_id):
     tasks = mongo.db.tasks
@@ -51,9 +74,53 @@ def update_task(task_id):
         }
     )
     return redirect(url_for('get_tasks'))
-"""
+
+
+@app.route('/delete_task/<task_id>')
+def delete_task(task_id):
+    mongo.db.tasks.remove({'_id': ObjectId(task_id)})
+    return redirect(url_for('get_tasks'))
+
+
+@app.route('/get_categories')
+def get_categories():
+    return render_template('categories.html',
+                           categories=mongo.db.categories.find())
+
+
+@app.route('/edit_category/<category_id>')
+def edit_category(category_id):
+    return render_template('editcategory.html',
+                           category=mongo.db.categories.find_one({'_id': ObjectId(category_id)}))
+
+
+@app.route('/update_category/<category_id>', methods=['POST'])
+def update_category(category_id):
+    mongo.db.categories.update({'_id': ObjectId(category_id)},
+                               {'category_name': request.form.get('category_name')})
+    return redirect(url_for('get_categories'))
+
+
+@app.route('/delete_category/<category_id>')
+def delete_category(category_id):
+    mongo.db.categories.remove({'_id': ObjectId(category_id)})
+    return redirect(url_for('get_categories'))
+
+
+@app.route('/insert_category', methods=['POST'])
+def insert_category():
+    categories = mongo.db.categories
+    category_doc = {'category_name': request.form.get('category_name')}
+    categories.insert_one(category_doc)
+    return redirect(url_for('get_categories'))
+
+
+@app.route('/new_category')
+def new_category():
+    return render_template('addcategory.html')
+
 
 if __name__ == '__main__':
     app.run(host=os.environ.get('IP'),
-            port=int(os.environ.get('PORT')),
+            port=os.environ.get('PORT'),
             debug=True)
